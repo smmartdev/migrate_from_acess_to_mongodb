@@ -6,3 +6,5 @@ test_stage5.py
 test_stage6.py
 test_stage7.py
 test_stage8.py
+resume.json
+logs
