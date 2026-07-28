@@ -18,9 +18,10 @@ Built for large databases (tested on 4M+ records) with batched reads, bulk write
 ## Requirements
 
 - Python 3.9+
-- Windows (or any OS with a working Access ODBC driver)
-- **Microsoft Access Database Engine** (ODBC driver) installed — download the "Microsoft Access Database Engine Redistributable" from Microsoft if `pyodbc.connect()` fails to find the driver
 - A running MongoDB instance
+- A working Access ODBC driver — this is the one part that differs by OS:
+  - **Windows:** install the **Microsoft Access Database Engine Redistributable** (search for it on microsoft.com). This gives you the `Microsoft Access Driver (*.mdb, *.accdb)` ODBC driver that `importer.py` uses by default.
+  - **Linux / macOS:** Microsoft's driver isn't available. Install `mdbtools` and `unixODBC`, then configure the MDBTools ODBC driver (e.g. `sudo apt install mdbtools unixodbc unixodbc-dev` on Debian/Ubuntu, plus registering the driver in `odbcinst.ini`). You'll also need to change the `DRIVER=` string in `get_access_connection()` inside `importer.py` from `Microsoft Access Driver (*.mdb, *.accdb)` to your configured MDBTools driver name.
 
 ## Installation
 
@@ -32,8 +33,14 @@ pip install -r requirements.txt
 
 ## Usage
 
+The commands below work identically on Windows, Linux, and macOS — only the file path format changes:
+
 ```bash
+# Windows
 python migrate.py --access-file "C:\path\to\database.accdb" --mongo-db my_database
+
+# Linux / macOS
+python migrate.py --access-file "/path/to/database.accdb" --mongo-db my_database
 ```
 
 Force a full rebuild (drops all target collections first):
@@ -64,7 +71,12 @@ python migrate.py --access-file "C:\path\to\database.accdb" --mongo-db my_databa
 Default batch size is 20,000 records (read from Access and written to MongoDB per round-trip). Override it:
 
 ```bash
+# Windows (cmd)
 set BATCH_SIZE=50000
+python migrate.py --access-file "..." --mongo-db my_database
+
+# Linux / macOS
+export BATCH_SIZE=50000
 python migrate.py --access-file "..." --mongo-db my_database
 ```
 
@@ -83,7 +95,14 @@ Progress is saved to `migration/resume.json` after every successful batch, per t
 
 - If the process stops for any reason, just re-run `python migrate.py ...` (same command, **without** `--fresh`) — it will skip finished tables and resume the unfinished one from its last saved offset.
 - `--fresh` deletes `resume.json` and all target collections, then starts over.
-- Delete `resume.json` manually if you ever want to force a "fresh" state without using `--fresh`.
+- Delete `resume.json` manually if you ever want to force a "fresh" state without using `--fresh`:
+  ```bash
+  # Windows (cmd)
+  del resume.json
+
+  # Linux / macOS
+  rm resume.json
+  ```
 
 ## Notes and limitations
 
@@ -93,6 +112,19 @@ Progress is saved to `migration/resume.json` after every successful batch, per t
   - resuming a crash *in the middle* of that specific table is not 100% order-guaranteed (Access has no default row order without `ORDER BY`).
 - **System tables are skipped automatically** (anything starting with `MSys`).
 - **Empty strings and whitespace-only strings** in Access are converted to `null` in MongoDB.
+
+## Project structure
+
+```
+migration/
+├── config.py         # connection defaults, batch size, paths
+├── logger.py          # logging setup (logs/import.log, logs/errors.log)
+├── resume.py           # crash-safe resume/checkpoint logic
+├── importer.py           # table discovery, read/transform/write logic
+├── migrate.py              # CLI entry point — run this
+├── requirements.txt
+└── logs/                     # created automatically on first run
+```
 
 ## Troubleshooting
 
@@ -106,7 +138,8 @@ Expected with some Access ODBC drivers — see [Notes and limitations](#notes-an
 Check `logs/errors.log` first — every insert failure is logged there with the exact exception. The final summary line always reports both the number of records *read* and the number *actually inserted*, plus the real live count in MongoDB, so a mismatch is easy to spot.
 
 **Can't connect to Access**
-Make sure you're running a Python interpreter with the same bitness (32-bit/64-bit) as your installed Access ODBC driver.
+- **Windows:** make sure you're running a Python interpreter with the same bitness (32-bit/64-bit) as your installed Access ODBC driver.
+- **Linux / macOS:** make sure `mdbtools`/`unixODBC` are installed and the driver name in `get_access_connection()` (in `importer.py`) matches what's registered in your `odbcinst.ini` — it will **not** be `Microsoft Access Driver (*.mdb, *.accdb)` by default on these platforms.
 
 ## License
 
