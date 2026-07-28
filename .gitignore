@@ -13,3 +13,6 @@ resume.json
 
 # Logs directory
 logs/
+
+# __pycache__ directory
+__pycache__/
